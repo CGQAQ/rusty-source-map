@@ -7,7 +7,7 @@ pub struct Position {
 #[derive(Debug, Clone)]
 pub struct Mapping {
 	pub generated: Position,
-	pub original: Position,
+	pub original: Option<Position>,
 	pub source: Option<String>,
 	pub name: Option<String>,
 }

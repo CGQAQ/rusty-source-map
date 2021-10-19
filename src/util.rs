@@ -35,15 +35,16 @@ pub fn compare_by_generated_pos_inflated(a: &Mapping, b: &Mapping) -> i32 {
 	if cmp != 0 {
 		return cmp;
 	}
+	if a.original.is_some() && b.original.is_some() {
+		cmp = a.original.as_ref().unwrap().line - b.original.as_ref().unwrap().line;
+		if cmp != 0 {
+			return cmp;
+		}
 
-	cmp = a.original.line - b.original.line;
-	if cmp != 0 {
-		return cmp;
-	}
-
-	cmp = a.original.column - b.original.column;
-	if cmp != 0 {
-		return cmp;
+		cmp = a.original.as_ref().unwrap().column - b.original.as_ref().unwrap().column;
+		if cmp != 0 {
+			return cmp;
+		}
 	}
 
 	return strcmp(a.name.clone(), b.name.clone());

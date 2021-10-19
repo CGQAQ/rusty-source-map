@@ -44,10 +44,7 @@ impl MappingList {
                     column: -1,
                     line: -1,
                 },
-                original: Position {
-                    column: -1,
-                    line: -1,
-                },
+                original: None,
             }),
             &mapping.clone(),
         ) {
