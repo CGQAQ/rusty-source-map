@@ -1,13 +1,13 @@
 use crate::mapping::{Mapping, Position};
 use crate::util;
 
-fn generatedPositionAfter(a: &Mapping, b: &Mapping) -> bool {
-    let lineA = a.generated.line;
-    let lineB = b.generated.line;
-    let columnA = a.generated.column;
-    let columnB = b.generated.column;
-    lineB > lineA
-        || (lineB == lineA && columnB >= columnA)
+fn generated_position_after(a: &Mapping, b: &Mapping) -> bool {
+    let line_a = a.generated.line;
+    let line_b = b.generated.line;
+    let column_a = a.generated.column;
+    let column_b = b.generated.column;
+    line_b > line_a
+        || (line_b == line_a && column_b >= column_a)
         || util::compare_by_generated_pos_inflated(a, b) <= 0
 }
 pub struct MappingList {
@@ -36,7 +36,7 @@ impl MappingList {
     }
 
     pub fn add(&mut self, mapping: Mapping) {
-        if generatedPositionAfter(
+        if generated_position_after(
             &self.last.clone().unwrap_or(Mapping {
                 name: None,
                 source: None,
