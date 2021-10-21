@@ -5,7 +5,8 @@ use crate::util::UrlType::{Absolute, PathAbsolute, SchemeRelative};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::LinkedList;
-use url::Url;
+use std::sync::Arc;
+use url::{ParseError, Url};
 
 pub fn strcmp(a: Option<String>, b: Option<String>) -> i32 {
     if a == b {
@@ -68,6 +69,7 @@ lazy_static! {
     static ref PROTOCOL_AND_HOST: String = format!("{}//host", PROTOCOL);
 }
 
+#[derive(Debug, Clone, PartialEq)]
 enum UrlType {
     Absolute,
     PathAbsolute,
@@ -164,14 +166,14 @@ fn compute_relative_url(root_url: &str, target_url: &str) -> String {
     relative_path
 }
 
-fn create_safe_handler(cb: impl Fn(&mut Url)) -> impl Fn(String) -> String {
-    move |input: String| -> String {
+fn create_safe_handler(cb: Box<dyn Fn(Arc<Url>) + Sync>) -> Box<dyn Fn(String) -> String + Sync> {
+    Box::new(move |input: String| -> String {
         let t = get_url_type(input.as_str());
         let base = build_safe_base(input.as_str());
         let urlx = Url::parse(base.as_str()).unwrap();
-        let mut urlx = urlx.join(input.as_str()).unwrap();
+        let mut urlx = Arc::new(urlx.join(input.as_str()).unwrap());
 
-        cb(&mut urlx);
+        cb(urlx.clone());
 
         let result = urlx.to_string();
 
@@ -181,15 +183,61 @@ fn create_safe_handler(cb: impl Fn(&mut Url)) -> impl Fn(String) -> String {
             PathAbsolute => result.chars().skip(PROTOCOL_AND_HOST.len()).collect(),
             _ => compute_relative_url(base.as_str(), result.as_str()),
         }
-    }
+    })
 }
 
+type UtilityFn = Box<dyn Fn(String) -> String + Sync>;
+
 lazy_static! {
-    static ref ensureDirectory: fn(String) -> String = create_safe_handler(|url| {
+    static ref ensureDirectory: UtilityFn = create_safe_handler(Box::new(|url| {
         // replace(/\/?$/, "/");
         let reg = Regex::new("/?$").unwrap();
 
         url.set_path(&*reg.replace(url.path(), "/"));
-    }) as fn(String) -> String;
+    }));
 
+    static ref trimFilename: UtilityFn = create_safe_handler(Box::new(|url| {
+        let mut path = url.path().split("/").collect::<Vec<_>>();
+
+        if path.last().unwrap().len() != 0 {
+            path.pop();
+        }
+
+        url.set_path(&path.join(""));
+    }));
+
+    static ref normalize: UtilityFn = create_safe_handler(Box::new(|url|{}));
+}
+
+fn replace_if_possible(root: &str, target: &str) -> Option<String> {
+    let url_type = get_url_type(root);
+    if url_type != get_url_type(target) {
+        return None;
+    }
+
+    let base = build_safe_base(&format!("{}{}", root, target));
+    let root_url = Url::parse(root).unwrap();
+    let target_url = Url::parse(target).unwrap();
+    match target_url.join("") {
+        Ok(_) => {}
+        Err(_) => return None,
+    };
+
+    if target_url.scheme() != root_url.scheme()
+        || target_url.username() != root_url.username()
+        || target_url.password() != root_url.password()
+        || target_url.host() != root_url.host()
+        || target_url.port() != root_url.port()
+    {
+        return None;
+    }
+
+    Some(compute_relative_url(root, target))
+}
+
+pub fn relative(root: String, target: String) -> String {
+    match replace_if_possible(root.as_str(), target.as_str()) {
+        None => normalize(target),
+        Some(r) => r,
+    }
 }
