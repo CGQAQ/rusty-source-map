@@ -5,8 +5,7 @@ use crate::util::UrlType::{Absolute, PathAbsolute, SchemeRelative};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::LinkedList;
-use std::sync::Arc;
-use url::{ParseError, Url};
+use url::Url;
 
 pub fn strcmp(a: Option<String>, b: Option<String>) -> i32 {
     if a == b {
@@ -55,7 +54,7 @@ pub fn compare_by_generated_pos_inflated(a: &Mapping, b: &Mapping) -> i32 {
         }
     }
 
-    return strcmp(a.name.clone(), b.name.clone());
+    strcmp(a.name.clone(), b.name.clone())
 }
 
 // We use 'http' as the base here because we want URLs processed relative
@@ -86,11 +85,11 @@ fn get_url_type(input: &str) -> UrlType {
         }
         return PathAbsolute;
     }
-    return if ABSOLUTE_SCHEME_REGEXP.is_match(input) {
+    if ABSOLUTE_SCHEME_REGEXP.is_match(input) {
         Absolute
     } else {
         PathAbsolute
-    };
+    }
 }
 
 fn build_unique_segment(prefix: &str, input: &str) -> String {
@@ -98,7 +97,7 @@ fn build_unique_segment(prefix: &str, input: &str) -> String {
     loop {
         let ident = format!("{}{}", prefix, id);
         id += 1;
-        if input.find(ident.as_str()).is_none() {
+        if !input.contains(ident.as_str()) {
             return ident;
         }
     }
@@ -137,12 +136,12 @@ fn compute_relative_url(root_url: &str, target_url: &str) -> String {
     let mut target_parts = target_url.path().split("/").collect::<LinkedList<_>>();
     let mut root_parts = root_url.path().split("/").collect::<LinkedList<_>>();
 
-    if root_parts.len() > 0 && root_parts.back().unwrap().len() == 0 {
+    if !root_parts.is_empty() && root_parts.back().unwrap().is_empty() {
         root_parts.pop_back();
     }
 
-    while target_parts.len() > 0
-        && root_parts.len() > 0
+    while !target_parts.is_empty()
+        && !root_parts.is_empty()
         && target_parts.front().unwrap() == root_parts.front().unwrap()
     {
         target_parts.pop_front();
@@ -166,14 +165,14 @@ fn compute_relative_url(root_url: &str, target_url: &str) -> String {
     relative_path
 }
 
-fn create_safe_handler(cb: Box<dyn Fn(Arc<Url>) + Sync>) -> Box<dyn Fn(String) -> String + Sync> {
+fn create_safe_handler(cb: Box<dyn Fn(&mut Url) + Sync>) -> Box<dyn Fn(String) -> String + Sync> {
     Box::new(move |input: String| -> String {
         let t = get_url_type(input.as_str());
         let base = build_safe_base(input.as_str());
         let urlx = Url::parse(base.as_str()).unwrap();
-        let mut urlx = Arc::new(urlx.join(input.as_str()).unwrap());
+        let mut urlx = urlx.join(input.as_str()).unwrap();
 
-        cb(urlx.clone());
+        cb(&mut urlx);
 
         let result = urlx.to_string();
 
@@ -189,24 +188,26 @@ fn create_safe_handler(cb: Box<dyn Fn(Arc<Url>) + Sync>) -> Box<dyn Fn(String) -
 type UtilityFn = Box<dyn Fn(String) -> String + Sync>;
 
 lazy_static! {
-    static ref ensureDirectory: UtilityFn = create_safe_handler(Box::new(|url| {
+    static ref ENSURE_DIRECTORY: UtilityFn = create_safe_handler(Box::new(|url| {
         // replace(/\/?$/, "/");
         let reg = Regex::new("/?$").unwrap();
 
-        url.set_path(&*reg.replace(url.path(), "/"));
+        let path = reg.replace(url.path(), "/").to_string();
+        url.set_path(&path);
     }));
 
-    static ref trimFilename: UtilityFn = create_safe_handler(Box::new(|url| {
-        let mut path = url.path().split("/").collect::<Vec<_>>();
+    static ref TRIM_FILENAME: UtilityFn = create_safe_handler(Box::new(|url| {
+        let path = url.path().to_string();
+        let mut path = path.split('/').collect::<Vec<_>>();
 
-        if path.last().unwrap().len() != 0 {
+        if !path.last().unwrap().is_empty() {
             path.pop();
         }
 
         url.set_path(&path.join(""));
     }));
 
-    static ref normalize: UtilityFn = create_safe_handler(Box::new(|url|{}));
+    static ref NORMALIZE: UtilityFn = create_safe_handler(Box::new(|_url|{}));
 }
 
 fn replace_if_possible(root: &str, target: &str) -> Option<String> {
@@ -216,8 +217,10 @@ fn replace_if_possible(root: &str, target: &str) -> Option<String> {
     }
 
     let base = build_safe_base(&format!("{}{}", root, target));
-    let root_url = Url::parse(root).unwrap();
-    let target_url = Url::parse(target).unwrap();
+    let root_url = Url::parse(&base).unwrap();
+    let root_url = root_url.join(root).unwrap();
+    let target_url = Url::parse(&base).unwrap();
+    let target_url = target_url.join(target).unwrap();
     match target_url.join("") {
         Ok(_) => {}
         Err(_) => return None,
@@ -237,7 +240,7 @@ fn replace_if_possible(root: &str, target: &str) -> Option<String> {
 
 pub fn relative(root: String, target: String) -> String {
     match replace_if_possible(root.as_str(), target.as_str()) {
-        None => normalize(target),
+        None => NORMALIZE(target),
         Some(r) => r,
     }
 }
