@@ -19,18 +19,18 @@ pub struct SourceMapJson {
     #[serde(rename = "sourceRoot")]
     source_root: Option<String>,
     #[serde(rename = "sourcesContent")]
-    sources_content: Vec<String>,
+    sources_content: Option<Vec<String>>,
 }
 
 pub struct SourceMapGenerator {
-    file: Option<String>,
-    source_root: Option<String>,
-    skip_validation: bool,
+    pub(crate) file: Option<String>,
+    pub(crate) source_root: Option<String>,
+    pub(crate) skip_validation: bool,
 
-    sources: ArraySet,
-    names: ArraySet,
-    mappings: MappingList,
-    source_contents: HashMap<String, String>,
+    pub(crate) sources: ArraySet,
+    pub(crate) names: ArraySet,
+    pub(crate) mappings: MappingList,
+    pub(crate) source_contents: HashMap<String, String>,
 }
 
 impl SourceMapGenerator {
@@ -38,10 +38,12 @@ impl SourceMapGenerator {
         unimplemented!()
     }
 
-    pub fn add_mapping(&mut self, mapping: Mapping, source: Option<String>, name: Option<String>) {
+    pub fn add_mapping(&mut self, mapping: Mapping) {
         // if (!this._skipValidation) {
         // 	this._validateMapping(generated, original, source, name);
         // }
+        let source: Option<String> = mapping.source.clone();
+        let name: Option<String> = mapping.name.clone();
 
         if let Some(ref s) = source {
             if !self.sources.has(s.clone()) {
@@ -180,24 +182,216 @@ impl SourceMapGenerator {
             .collect()
     }
 
-    fn as_json(&mut self) -> SourceMapJson {
+    pub(crate) fn as_json(&mut self) -> SourceMapJson {
         let sources_vec = self.sources.to_vec();
+        let mut sources_content: Option<Vec<String>> = None;
+        if self.source_contents.len() > 0 {
+            sources_content = Some(
+                self.generate_sources_contents(sources_vec.clone(), self.source_root.clone())
+                    .into_iter()
+                    .flatten()
+                    .collect(),
+            );
+        }
         SourceMapJson {
             version: 3,
-            sources: sources_vec.clone(),
+            sources: sources_vec,
             names: self.names.to_vec(),
             mappings: self.serialize_mappings(),
             file: self.file.clone(),
             source_root: self.source_root.clone(),
-            sources_content: self
-                .generate_sources_contents(sources_vec, self.source_root.clone())
-                .into_iter()
-                .flatten()
-                .collect(),
+            sources_content,
         }
     }
 
     fn as_string(&mut self) -> String {
         serde_json::to_string(&self.as_json()).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::array_set::ArraySet;
+    use crate::mapping::Position;
+    use crate::mapping_list::MappingList;
+
+    #[test]
+    fn simple() {
+        let map = SourceMapGenerator {
+            file: Some("foo.js".to_string()),
+            source_root: Some(".".to_string()),
+            skip_validation: false,
+            sources: ArraySet::new(),
+            names: ArraySet::new(),
+            mappings: MappingList::new(),
+            source_contents: Default::default(),
+        }
+        .as_json();
+        assert!(map.file.is_some());
+        assert!(map.source_root.is_some());
+    }
+
+    #[test]
+    fn simple_json() {
+        let map = SourceMapGenerator {
+            file: Some("foo.js".to_string()),
+            source_root: Some(".".to_string()),
+            skip_validation: false,
+            sources: ArraySet::new(),
+            names: ArraySet::new(),
+            mappings: MappingList::new(),
+            source_contents: Default::default(),
+        }
+        .as_string();
+        assert_eq!(map, r#"{"version":3,"sources":[],"names":[],"mappings":"","file":"foo.js","sourceRoot":".","sourcesContent":[]}"#.to_string());
+    }
+
+    #[test]
+    fn mappings() {
+        let mut map = SourceMapGenerator {
+            file: Some("min.js".to_string()),
+            source_root: Some("/the/root".to_string()),
+            skip_validation: false,
+            sources: ArraySet::new(),
+            names: ArraySet::new(),
+            mappings: MappingList::new(),
+            source_contents: Default::default(),
+        };
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 1, column: 1 },
+            original: Some(Position { line: 1, column: 1 }),
+            source: Some("one.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 1, column: 5 },
+            original: Some(Position { line: 1, column: 5 }),
+            source: Some("one.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 1, column: 9 },
+            original: Some(Position {
+                line: 1,
+                column: 11,
+            }),
+            source: Some("one.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 1,
+                column: 18,
+            },
+            original: Some(Position {
+                line: 1,
+                column: 21,
+            }),
+            source: Some("one.js".to_string()),
+            name: Some("bar".to_string()),
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 1,
+                column: 21,
+            },
+            original: Some(Position { line: 2, column: 3 }),
+            source: Some("one.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 1,
+                column: 28,
+            },
+            original: Some(Position {
+                line: 2,
+                column: 10,
+            }),
+            source: Some("one.js".to_string()),
+            name: Some("baz".to_string()),
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 1,
+                column: 32,
+            },
+            original: Some(Position {
+                line: 2,
+                column: 14,
+            }),
+            source: Some("one.js".to_string()),
+            name: Some("bar".to_string()),
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 2, column: 1 },
+            original: Some(Position { line: 1, column: 1 }),
+            source: Some("two.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 2, column: 5 },
+            original: Some(Position { line: 1, column: 5 }),
+            source: Some("two.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position { line: 2, column: 9 },
+            original: Some(Position {
+                line: 1,
+                column: 11,
+            }),
+            source: Some("two.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 2,
+                column: 18,
+            },
+            original: Some(Position {
+                line: 1,
+                column: 21,
+            }),
+            source: Some("two.js".to_string()),
+            name: Some("n".to_string()),
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 2,
+                column: 21,
+            },
+            original: Some(Position { line: 2, column: 3 }),
+            source: Some("two.js".to_string()),
+            name: None,
+        });
+
+        map.add_mapping(Mapping {
+            generated: Position {
+                line: 2,
+                column: 28,
+            },
+            original: Some(Position {
+                line: 2,
+                column: 10,
+            }),
+            source: Some("two.js".to_string()),
+            name: Some("n".to_string()),
+        });
+
+        assert_eq!(map.as_string(), r#"{"version":3,"sources":["one.js","two.js"],"names":["bar","baz","n"],"mappings":"CAAC,IAAI,IAAM,SAAUA,GAClB,OAAOC,IAAID;CCDb,IAAI,IAAM,SAAUE,GAClB,OAAOA","file":"min.js","sourceRoot":"/the/root","sourcesContent":null}"#.to_string())
     }
 }
