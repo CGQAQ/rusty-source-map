@@ -192,7 +192,7 @@ impl SourceMapGenerator {
         }
     }
 
-    fn as_string(&mut self) -> String {
+    pub fn as_string(&mut self) -> String {
         serde_json::to_string(&self.as_json()).unwrap()
     }
 }

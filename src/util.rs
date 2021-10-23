@@ -3,7 +3,7 @@
 use crate::mapping::Mapping;
 use crate::util::UrlType::{Absolute, PathAbsolute, SchemeRelative};
 use lazy_static::lazy_static;
-use regex::Regex;
+use regex::{Regex, Replacer};
 use std::collections::LinkedList;
 use url::Url;
 
@@ -243,4 +243,114 @@ pub fn relative(root: String, target: String) -> String {
         None => NORMALIZE(target),
         Some(r) => r,
     }
+}
+
+fn with_base(url: &str, base: Option<&str>) -> String {
+    match base {
+        Some(base) => Url::parse(base)
+            .unwrap()
+            .join(url)
+            .unwrap()
+            .as_str()
+            .to_string(),
+        None => url.to_string(),
+    }
+}
+
+pub fn join(root: &str, path: &str) -> String {
+    let path_t = get_url_type(path);
+    let root_t = get_url_type(root);
+
+    let root = ENSURE_DIRECTORY(root.to_owned());
+
+    if path_t == Absolute {
+        return with_base(path, None);
+    }
+
+    if root_t == Absolute {
+        return with_base(path, root).to;
+    }
+
+    if path_t == SchemeRelative {
+        return NORMALIZE(path.to_string());
+    }
+
+    if root_t == SchemeRelative {
+        return with_base(
+            path,
+            Some(with_base(root.as_str(), Some(PROTOCOL_AND_HOST.as_str())).as_str()),
+        )
+        .chars()
+        .skip(PROTOCOL.len())
+        .collect();
+    }
+
+    if path_t == PathAbsolute {
+        return NORMALIZE(path.to_string());
+    }
+
+    if root_t == PathAbsolute {
+        return with_base(
+            path,
+            Some(with_base(root.as_str(), Some(PROTOCOL_AND_HOST.as_str())).as_str()),
+        )
+        .chars()
+        .skip(PROTOCOL_AND_HOST.len())
+        .collect();
+    }
+
+    let base = build_safe_base(format!("{}{}", path, root).as_str());
+    let new_path = with_base(
+        path,
+        Some(with_base(root.as_str(), Some(base.as_str())).as_str()),
+    );
+    compute_relative_url(base.as_str(), new_path.as_str())
+}
+
+pub fn compute_source_url(
+    source_root: Option<&str>,
+    mut source_url: &str,
+    source_map_url: Option<&str>,
+) -> String {
+    // The source map spec states that "sourceRoot" and "sources" entries are to be appended. While
+    // that is a little vague, implementations have generally interpreted that as joining the
+    // URLs with a `/` between then, assuming the "sourceRoot" doesn't already end with one.
+    // For example,
+    //
+    //   sourceRoot: "some-dir",
+    //   sources: ["/some-path.js"]
+    //
+    // and
+    //
+    //   sourceRoot: "some-dir/",
+    //   sources: ["/some-path.js"]
+    //
+    // must behave as "some-dir/some-path.js".
+    //
+    // With this library's the transition to a more URL-focused implementation, that behavior is
+    // preserved here. To acheive that, we trim the "/" from absolute-path when a sourceRoot value
+    // is present in order to make the sources entries behave as if they are relative to the
+    // "sourceRoot", as they would have if the two strings were simply concated.
+
+    if let Some(source_root) = source_root {
+        if get_url_type(source_url) == PathAbsolute {
+            // sourceURL = sourceURL.replace(/^\//, "");
+            source_url = &*source_url.replacen("/", "", 1);
+        }
+    }
+
+    let mut url = NORMALIZE(source_url.to_string());
+
+    if let Some(source_root) = source_root {
+        url = join(source_root, url.as_str());
+    }
+
+    if let Some(source_map_url) = source_map_url {
+        url = join(
+            TRIM_FILENAME(source_map_url.to_string()).as_str(),
+            url.as_str(),
+        );
+    }
+
+    url
 }
