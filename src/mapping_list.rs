@@ -1,4 +1,5 @@
-use crate::mapping::{Mapping, Position};
+use crate::mapping::Mapping;
+use crate::source_map::Position;
 use crate::util;
 
 fn generated_position_after(a: &Mapping, b: &Mapping) -> bool {

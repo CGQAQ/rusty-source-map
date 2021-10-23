@@ -4,23 +4,10 @@ use crate::array_set::ArraySet;
 use crate::base64_vlq::base64vlq_encode;
 use crate::mapping::Mapping;
 use crate::mapping_list::MappingList;
+use crate::source_map::SourceMapJson;
 use crate::util;
-use serde::Serialize;
 use serde_json;
 use std::collections::hash_map::HashMap;
-
-#[derive(Serialize)]
-pub struct SourceMapJson {
-    version: i32,
-    sources: Vec<String>,
-    names: Vec<String>,
-    mappings: String,
-    file: Option<String>,
-    #[serde(rename = "sourceRoot")]
-    source_root: Option<String>,
-    #[serde(rename = "sourcesContent")]
-    sources_content: Option<Vec<String>>,
-}
 
 pub struct SourceMapGenerator {
     pub(crate) file: Option<String>,
@@ -201,6 +188,7 @@ impl SourceMapGenerator {
             file: self.file.clone(),
             source_root: self.source_root.clone(),
             sources_content,
+            sections: None,
         }
     }
 
@@ -213,8 +201,8 @@ impl SourceMapGenerator {
 mod test {
     use super::*;
     use crate::array_set::ArraySet;
-    use crate::mapping::Position;
     use crate::mapping_list::MappingList;
+    use crate::source_map::Position;
 
     #[test]
     fn simple() {
