@@ -5,6 +5,22 @@ use crate::source_map::{Position, SourceMapJson};
 use crate::util;
 use std::collections::HashMap;
 
+///
+/// You should always use this function to create consumer
+///
+pub fn create_consumer(source_map_raw: &str) -> Result<Consumer, serde_json::Error> {
+    let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw)?;
+    if source_map.sections.is_some() {
+        Ok(Consumer::IndexedConsumer(
+            IndexedConsumer::from_source_map_json(source_map),
+        ))
+    } else {
+        Ok(Consumer::BasicConsumer(
+            BasicConsumer::from_source_map_json(source_map),
+        ))
+    }
+}
+
 pub enum Consumer {
     BasicConsumer(BasicConsumer),
     IndexedConsumer(IndexedConsumer),
@@ -385,19 +401,6 @@ impl IndexedConsumer {
 
     pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
         IndexedConsumer { source_map }
-    }
-}
-
-pub fn create_consumer(source_map_raw: &str) -> Result<Consumer, serde_json::Error> {
-    let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw)?;
-    if source_map.sections.is_some() {
-        Ok(Consumer::IndexedConsumer(
-            IndexedConsumer::from_source_map_json(source_map),
-        ))
-    } else {
-        Ok(Consumer::BasicConsumer(
-            BasicConsumer::from_source_map_json(source_map),
-        ))
     }
 }
 
