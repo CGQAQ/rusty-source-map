@@ -3,7 +3,7 @@
 use crate::mapping::Mapping;
 use crate::util::UrlType::{Absolute, PathAbsolute, SchemeRelative};
 use lazy_static::lazy_static;
-use regex::{Regex, Replacer};
+use regex::Regex;
 use std::collections::LinkedList;
 use url::Url;
 
@@ -268,7 +268,7 @@ pub fn join(root: &str, path: &str) -> String {
     }
 
     if root_t == Absolute {
-        return with_base(path, root).to;
+        return with_base(path, Some(root.as_str()));
     }
 
     if path_t == SchemeRelative {
@@ -309,7 +309,7 @@ pub fn join(root: &str, path: &str) -> String {
 
 pub fn compute_source_url(
     source_root: Option<&str>,
-    mut source_url: &str,
+    source_url: &str,
     source_map_url: Option<&str>,
 ) -> String {
     // The source map spec states that "sourceRoot" and "sources" entries are to be appended. While
@@ -332,11 +332,12 @@ pub fn compute_source_url(
     // is present in order to make the sources entries behave as if they are relative to the
     // "sourceRoot", as they would have if the two strings were simply concated.
 
-    if let Some(source_root) = source_root {
-        if get_url_type(source_url) == PathAbsolute {
-            // sourceURL = sourceURL.replace(/^\//, "");
-            source_url = &*source_url.replacen("/", "", 1);
-        }
+    let mut source_url = source_url;
+    let after = source_url.replacen("/", "", 1);
+
+    if source_root.is_some() && get_url_type(source_url) == PathAbsolute {
+        // sourceURL = sourceURL.replace(/^\//, "");
+        source_url = after.as_str();
     }
 
     let mut url = NORMALIZE(source_url.to_string());

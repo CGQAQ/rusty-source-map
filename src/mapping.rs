@@ -6,4 +6,5 @@ pub struct Mapping {
     pub original: Option<Position>,
     pub source: Option<String>,
     pub name: Option<String>,
+    pub last_generated_column: Option<i32>,
 }

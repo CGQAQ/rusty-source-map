@@ -20,7 +20,7 @@ pub struct Section {
     map: Box<SourceMapJson>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Position {
     pub line: i32,
     pub column: i32,
