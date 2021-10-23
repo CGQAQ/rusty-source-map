@@ -252,6 +252,7 @@ mod test {
             original: Some(Position { line: 1, column: 1 }),
             source: Some("one.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -259,6 +260,7 @@ mod test {
             original: Some(Position { line: 1, column: 5 }),
             source: Some("one.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -269,6 +271,7 @@ mod test {
             }),
             source: Some("one.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -282,6 +285,7 @@ mod test {
             }),
             source: Some("one.js".to_string()),
             name: Some("bar".to_string()),
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -292,6 +296,7 @@ mod test {
             original: Some(Position { line: 2, column: 3 }),
             source: Some("one.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -305,6 +310,7 @@ mod test {
             }),
             source: Some("one.js".to_string()),
             name: Some("baz".to_string()),
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -318,6 +324,7 @@ mod test {
             }),
             source: Some("one.js".to_string()),
             name: Some("bar".to_string()),
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -325,6 +332,7 @@ mod test {
             original: Some(Position { line: 1, column: 1 }),
             source: Some("two.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -332,6 +340,7 @@ mod test {
             original: Some(Position { line: 1, column: 5 }),
             source: Some("two.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -342,6 +351,7 @@ mod test {
             }),
             source: Some("two.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -355,6 +365,7 @@ mod test {
             }),
             source: Some("two.js".to_string()),
             name: Some("n".to_string()),
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -365,6 +376,7 @@ mod test {
             original: Some(Position { line: 2, column: 3 }),
             source: Some("two.js".to_string()),
             name: None,
+            last_generated_column: None,
         });
 
         map.add_mapping(Mapping {
@@ -378,6 +390,7 @@ mod test {
             }),
             source: Some("two.js".to_string()),
             name: Some("n".to_string()),
+            last_generated_column: None,
         });
 
         assert_eq!(map.as_string(), r#"{"version":3,"sources":["one.js","two.js"],"names":["bar","baz","n"],"mappings":"CAAC,IAAI,IAAM,SAAUA,GAClB,OAAOC,IAAID;CCDb,IAAI,IAAM,SAAUE,GAClB,OAAOA","file":"min.js","sourceRoot":"/the/root","sourcesContent":null}"#.to_string())

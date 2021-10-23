@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::mapping::Mapping;
-use crate::util::UrlType::{Absolute, PathAbsolute, SchemeRelative};
+use crate::util::UrlType::{Absolute, PathAbsolute, PathRelative, SchemeRelative};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::LinkedList;
@@ -77,8 +77,9 @@ enum UrlType {
 }
 
 fn get_url_type(input: &str) -> UrlType {
-    let first = input.chars().nth(0).unwrap();
-    let second = input.chars().nth(1).unwrap();
+    let mut iter = input.chars();
+    let first = iter.next().unwrap();
+    let second = iter.next().unwrap();
     if first == '/' {
         if second == '/' {
             return SchemeRelative;
@@ -88,7 +89,7 @@ fn get_url_type(input: &str) -> UrlType {
     if ABSOLUTE_SCHEME_REGEXP.is_match(input) {
         Absolute
     } else {
-        PathAbsolute
+        PathRelative
     }
 }
 

@@ -32,10 +32,23 @@ impl BasicConsumer {
     pub fn new(source_map_raw: &str, source_map_url: Option<&str>) -> Self {
         let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw).unwrap();
         BasicConsumer {
-            source_map,
+            source_map: source_map.clone(),
             source_lookup_cache: Default::default(),
             source_map_url: source_map_url.map(|it| it.to_string()),
-            absolute_sources: ArraySet::new(),
+            absolute_sources: ArraySet::from_array(
+                source_map
+                    .sources
+                    .iter()
+                    .map(|it| {
+                        util::compute_source_url(
+                            source_map.source_root.as_deref(),
+                            it,
+                            source_map_url,
+                        )
+                    })
+                    .collect(),
+                true,
+            ),
             mappings: None,
             computed_column_spans: false,
         }
@@ -43,10 +56,17 @@ impl BasicConsumer {
 
     pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
         BasicConsumer {
-            source_map,
+            source_map: source_map.clone(),
             source_lookup_cache: Default::default(),
             source_map_url: None,
-            absolute_sources: ArraySet::new(),
+            absolute_sources: ArraySet::from_array(
+                source_map
+                    .sources
+                    .iter()
+                    .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
+                    .collect(),
+                true,
+            ),
             mappings: None,
             computed_column_spans: false,
         }
@@ -91,7 +111,7 @@ impl BasicConsumer {
         {
             let index = self
                 .absolute_sources
-                .index_of(source_as_source_root_relative.clone())
+                .index_of(source_as_source_root_relative)
                 .unwrap();
             self.source_lookup_cache
                 .insert(source.to_string(), index as i32);
@@ -398,10 +418,11 @@ mod tests {
     fn test_sources() {
         let map = create_consumer(TEST_MAP).unwrap();
         if let Consumer::BasicConsumer(consumer) = map {
-            let sources = consumer.source_map.sources;
+            let sources = consumer.absolute_sources.to_vec();
             assert_eq!(sources[0], "/the/root/one.js");
             assert_eq!(sources[1], "/the/root/two.js");
             assert_eq!(sources.len(), 2);
+            return;
         }
         panic!("Not ok");
     }

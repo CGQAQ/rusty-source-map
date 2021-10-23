@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SourceMapJson {
     pub version: i32,
     pub sources: Vec<String>,
@@ -14,7 +14,7 @@ pub struct SourceMapJson {
     pub sections: Option<Section>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Section {
     offset: Position,
     map: Box<SourceMapJson>,
