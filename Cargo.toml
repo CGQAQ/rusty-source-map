@@ -2,6 +2,12 @@
 name = "rusty-source-map"
 version = "0.1.0"
 edition = "2018"
+authors = ["CGQAQ <m.jason.liu@outlook.com>"]
+homepage = "https://github.com/CGQAQ/rusty-source-map"
+repository = "https://github.com/CGQAQ/rusty-source-map"
+license = "MIT"
+description = "`source-map` NPM package written in Rust."
+
 
 [profile.release]
 opt-level = 3
