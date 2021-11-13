@@ -26,6 +26,72 @@ pub enum Consumer {
     IndexedConsumer(IndexedConsumer),
 }
 
+impl Consumer {
+    pub fn as_basic_consumer(&self) -> &BasicConsumer {
+        if let Self::BasicConsumer(ref consumer) = self {
+            consumer
+        } else {
+            panic!("The consumer is not a basic consumer");
+        }
+    }
+
+    pub fn as_indexed_consumer(&self) -> &IndexedConsumer {
+        if let Self::IndexedConsumer(ref consumer) = self {
+            consumer
+        } else {
+            panic!("The consumer is not a basic consumer");
+        }
+    }
+
+    pub fn as_basic_consumer_mut(&mut self) -> &mut BasicConsumer {
+        if let Self::BasicConsumer(ref mut consumer) = self {
+            consumer
+        } else {
+            panic!("The consumer is not a basic consumer");
+        }
+    }
+
+    pub fn as_indexed_consumer_mut(&mut self) -> &mut IndexedConsumer {
+        if let Self::IndexedConsumer(ref mut consumer) = self {
+            consumer
+        } else {
+            panic!("The consumer is not a basic consumer");
+        }
+    }
+
+    pub fn try_as_basic_consumer(&self) -> Option<&BasicConsumer> {
+        if let Self::BasicConsumer(ref consumer) = self {
+            Some(consumer)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_as_indexed_consumer(&self) -> Option<&IndexedConsumer> {
+        if let Self::IndexedConsumer(ref consumer) = self {
+            Some(consumer)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_as_basic_consumer_mut(&mut self) -> Option<&mut BasicConsumer> {
+        if let Self::BasicConsumer(ref mut consumer) = self {
+            Some(consumer)
+        } else {
+            None
+        }
+    }
+
+    pub fn try_as_indexed_consumer_mut(&mut self) -> Option<&mut IndexedConsumer> {
+        if let Self::IndexedConsumer(ref mut consumer) = self {
+            Some(consumer)
+        } else {
+            None
+        }
+    }
+}
+
 pub enum IterOrd {
     GeneratedOrd,
     OriginalOrd,
@@ -38,11 +104,11 @@ pub trait ConsumerTrait: Sized {
 
 pub struct BasicConsumer {
     pub source_map: SourceMapJson,
-    source_lookup_cache: HashMap<String, i32>,
-    source_map_url: Option<String>,
-    absolute_sources: ArraySet,
-    mappings: Option<source_map_mappings::Mappings>,
-    computed_column_spans: bool,
+    pub(crate) source_lookup_cache: HashMap<String, i32>,
+    pub(crate) source_map_url: Option<String>,
+    pub(crate) absolute_sources: ArraySet,
+    pub(crate) mappings: Option<source_map_mappings::Mappings>,
+    pub(crate) computed_column_spans: bool,
 }
 impl BasicConsumer {
     pub fn new(source_map_raw: &str, source_map_url: Option<&str>) -> Self {
@@ -183,7 +249,7 @@ impl BasicConsumer {
                 original_line as u32,
                 Some(original_column as u32),
             )
-            .map(|it| it.clone())
+            .cloned()
             .collect()
     }
 
@@ -401,32 +467,5 @@ impl IndexedConsumer {
 
     pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
         IndexedConsumer { source_map }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    const TEST_MAP: &str = r#"{
-  "version": 3,
-  "file": "min.js",
-  "names": ["bar", "baz", "n"],
-  "sources": ["one.js", "two.js"],
-  "sourceRoot": "/the/root",
-  "mappings":
-  "CAAC,IAAI,IAAM,SAAUA,GAClB,OAAOC,IAAID;CCDb,IAAI,IAAM,SAAUE,GAClB,OAAOA"
-}"#;
-
-    use super::*;
-    #[test]
-    fn test_sources() {
-        let map = create_consumer(TEST_MAP).unwrap();
-        if let Consumer::BasicConsumer(consumer) = map {
-            let sources = consumer.absolute_sources.to_vec();
-            assert_eq!(sources[0], "/the/root/one.js");
-            assert_eq!(sources[1], "/the/root/two.js");
-            assert_eq!(sources.len(), 2);
-            return;
-        }
-        panic!("Not ok");
     }
 }
