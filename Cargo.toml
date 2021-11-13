@@ -19,6 +19,9 @@ path = "src/lib.rs"
 name = "bench"
 path = "bench/main.rs"
 
+[test]
+
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
