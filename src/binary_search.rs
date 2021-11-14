@@ -14,17 +14,14 @@ pub const LEAST_UPPER_BOUND: i32 = 2;
 ///     closest element that is smaller than or greater than the one we are
 ///     searching for, respectively, if the exact element cannot be found.
 /// ref: https://github.com/mozilla/source-map/blob/58819f09018d56ef84dc41ba9c93f554e0645169/lib/binary-search.js#L24
-fn recursive_search<T>(
+fn recursive_search<T1, T2>(
     low: i32,
     high: i32,
-    needle: T,
-    hay_stack: Vec<T>,
-    compare: &impl Fn(&T, &T) -> i32,
+    needle: &T1,
+    hay_stack: &Vec<T2>,
+    compare: &impl Fn(&T1, &T2) -> i32,
     bias: i32,
-) -> i32
-where
-    T: Clone,
-{
+) -> i32 {
     // This function terminates when one of the following is true:
     //
     //   1. We find the exact element we are looking for.
@@ -36,7 +33,7 @@ where
     //      element than the one we are searching for, so we return -1.
 
     let mid: i32 = (high - low) / 2 + low;
-    let cmp = compare(&needle, &hay_stack[mid as usize]);
+    let cmp = compare(needle, &hay_stack[mid as usize]);
 
     if cmp == 0 {
         // Found the element we are looking for.
@@ -45,9 +42,8 @@ where
         // Our needle is greater than aHaystack[mid].
         if high - mid > 1 {
             // The element is in the upper half.
-            return recursive_search(mid, high, needle, hay_stack.clone(), compare, bias);
+            return recursive_search(mid, high, needle, hay_stack, compare, bias);
         }
-
         // The exact needle element was not found in this haystack. Determine if
         // we are in termination case (3) or (2) and return the appropriate thing.
         if bias == LEAST_UPPER_BOUND {
@@ -62,7 +58,7 @@ where
 
     // Our needle is less than aHaystack[mid].
     if mid - low > 1 {
-        return recursive_search(low, mid, needle, hay_stack.clone(), compare, bias);
+        return recursive_search(low, mid, needle, hay_stack, compare, bias);
     }
 
     // we are in termination case (3) or (2) and return the appropriate thing.
@@ -73,15 +69,13 @@ where
     return if low < 0 { -1 } else { low };
 }
 
-pub fn search<T>(
-    needle: T,
-    hay_stack: Vec<T>,
-    compare: impl Fn(&T, &T) -> i32,
+pub fn search<T1, T2>(
+    needle: T1,
+    hay_stack: &Vec<T2>,
+    compare1: impl Fn(&T1, &T2) -> i32,
+    compare2: impl Fn(&T2, &T2) -> i32,
     bias: Option<i32>,
-) -> i32
-where
-    T: Clone,
-{
+) -> i32 {
     if hay_stack.len() == 0 {
         return -1;
     }
@@ -89,9 +83,9 @@ where
     let mut index = recursive_search(
         -1,
         hay_stack.len() as i32,
-        needle,
-        hay_stack.clone(),
-        &compare,
+        &needle,
+        hay_stack,
+        &compare1,
         bias.unwrap_or(GREATEST_LOWER_BOUND),
     );
     if index < 0 {
@@ -102,7 +96,7 @@ where
     // the one we are searching for. However, there may be more than one such
     // element. Make sure we always return the smallest of these.
     while index - 1 >= 0 {
-        if compare(&hay_stack[index as usize], &hay_stack[(index - 1) as usize]) != 0 {
+        if compare2(&hay_stack[index as usize], &hay_stack[(index - 1) as usize]) != 0 {
             break;
         }
         index -= 1;
@@ -125,7 +119,7 @@ mod test {
         let hay_stack = vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
 
         assert_eq!(
-            hay_stack[search(needle, hay_stack.clone(), number_cmp, None) as usize],
+            hay_stack[search(needle, &hay_stack, number_cmp, number_cmp, None) as usize],
             20
         );
     }
@@ -137,7 +131,8 @@ mod test {
         assert_eq!(
             hay_stack[search(
                 needle,
-                hay_stack.clone(),
+                &hay_stack,
+                number_cmp,
                 number_cmp,
                 Some(LEAST_UPPER_BOUND)
             ) as usize],
@@ -151,7 +146,7 @@ mod test {
         let hay_stack = vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
 
         assert_eq!(
-            hay_stack[search(needle, hay_stack.clone(), number_cmp, None) as usize],
+            hay_stack[search(needle, &hay_stack, number_cmp, number_cmp, None) as usize],
             4
         )
     }
@@ -162,7 +157,7 @@ mod test {
         let hay_stack = vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
 
         assert_eq!(
-            hay_stack[search(needle, hay_stack.clone(), number_cmp, None) as usize],
+            hay_stack[search(needle, &hay_stack, number_cmp, number_cmp, None) as usize],
             18
         )
     }
@@ -175,7 +170,8 @@ mod test {
         assert_eq!(
             hay_stack[search(
                 needle,
-                hay_stack.clone(),
+                &hay_stack,
+                number_cmp,
                 number_cmp,
                 Some(LEAST_UPPER_BOUND)
             ) as usize],
@@ -190,7 +186,8 @@ mod test {
         assert_eq!(
             search(
                 needle,
-                hay_stack.clone(),
+                &hay_stack,
+                number_cmp,
                 number_cmp,
                 Some(LEAST_UPPER_BOUND)
             ),
@@ -206,7 +203,8 @@ mod test {
         assert_eq!(
             search(
                 needle,
-                hay_stack.clone(),
+                &hay_stack,
+                number_cmp,
                 number_cmp,
                 Some(LEAST_UPPER_BOUND)
             ),

@@ -2,7 +2,7 @@ use crate::array_set::ArraySet;
 use crate::generator::SourceMapGenerator;
 use crate::mapping::Mapping;
 use crate::source_map::{Position, SourceMapJson};
-use crate::util;
+use crate::{binary_search, util};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::panic;
@@ -568,7 +568,22 @@ impl IndexedConsumer {
         }
     }
 
-    // pub fn get_sources(&self) -> {
-    //
-    // }
+    /// The list of original sources.
+    pub fn get_sources(&self) -> Vec<String> {
+        let mut sources: Vec<String> = vec![];
+
+        for i in 0..self.sections.len() {
+            for j in 0..self.sections[i].consumer.source_map.sources.len() {
+                sources.push(self.sections[i].consumer.source_map.sources[j].clone());
+            }
+        }
+
+        sources
+    }
+
+    pub fn original_position_for(&self, input: Position) {
+        let needle = input;
+
+        let section_index = binary_search::search(needle, &self.sections, |a, b| 0, |a, b| 0, None);
+    }
 }
