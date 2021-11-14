@@ -134,8 +134,8 @@ fn compute_relative_url(root_url: &str, target_url: &str) -> String {
     let root_url = Url::parse(root_url).unwrap();
     let target_url = Url::parse(target_url).unwrap();
 
-    let mut target_parts = target_url.path().split("/").collect::<LinkedList<_>>();
-    let mut root_parts = root_url.path().split("/").collect::<LinkedList<_>>();
+    let mut target_parts = target_url.path().split('/').collect::<LinkedList<_>>();
+    let mut root_parts = root_url.path().split('/').collect::<LinkedList<_>>();
 
     if !root_parts.is_empty() && root_parts.back().unwrap().is_empty() {
         root_parts.pop_back();
