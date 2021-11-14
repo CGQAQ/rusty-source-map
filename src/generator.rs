@@ -182,9 +182,9 @@ impl SourceMapGenerator {
         }
         SourceMapJson {
             version: 3,
-            sources: sources_vec,
-            names: self.names.to_vec(),
-            mappings: self.serialize_mappings(),
+            sources: Some(sources_vec),
+            names: Some(self.names.to_vec()),
+            mappings: Some(self.serialize_mappings()),
             file: self.file.clone(),
             source_root: self.source_root.clone(),
             sources_content,
@@ -232,7 +232,7 @@ mod test {
             source_contents: Default::default(),
         }
         .as_string();
-        assert_eq!(map, r#"{"version":3,"sources":[],"names":[],"mappings":"","file":"foo.js","sourceRoot":".","sourcesContent":[]}"#.to_string());
+        assert_eq!(map, r#"{"version":3,"sources":[],"names":[],"mappings":"","file":"foo.js","sourceRoot":"."}"#.to_string());
     }
 
     #[test]
@@ -393,6 +393,6 @@ mod test {
             last_generated_column: None,
         });
 
-        assert_eq!(map.as_string(), r#"{"version":3,"sources":["one.js","two.js"],"names":["bar","baz","n"],"mappings":"CAAC,IAAI,IAAM,SAAUA,GAClB,OAAOC,IAAID;CCDb,IAAI,IAAM,SAAUE,GAClB,OAAOA","file":"min.js","sourceRoot":"/the/root","sourcesContent":null}"#.to_string())
+        assert_eq!(map.as_string(), r#"{"version":3,"sources":["one.js","two.js"],"names":["bar","baz","n"],"mappings":"CAAC,IAAI,IAAM,SAAUA,GAClB,OAAOC,IAAID;CCDb,IAAI,IAAM,SAAUE,GAClB,OAAOA","file":"min.js","sourceRoot":"/the/root"}"#.to_string())
     }
 }

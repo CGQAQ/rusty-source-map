@@ -3,7 +3,7 @@ use crate::generator::SourceMapGenerator;
 use crate::mapping::Mapping;
 use crate::source_map::{Position, SourceMapJson};
 use crate::{binary_search, util};
-use rayon::prelude::*;
+use rayon::{prelude::*, vec};
 use std::collections::HashMap;
 use std::panic;
 use std::sync::{Arc, Mutex};
@@ -123,6 +123,8 @@ impl BasicConsumer {
             absolute_sources: ArraySet::from_array(
                 source_map
                     .sources
+                    .as_ref()
+                    .unwrap()
                     .iter()
                     .map(|it| {
                         util::compute_source_url(
@@ -147,6 +149,8 @@ impl BasicConsumer {
             absolute_sources: ArraySet::from_array(
                 source_map
                     .sources
+                    .as_ref()
+                    .unwrap()
                     .iter()
                     .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
                     .collect(),
@@ -211,7 +215,9 @@ impl BasicConsumer {
     }
 
     fn parse_mappings(&self) -> Result<source_map_mappings::Mappings, source_map_mappings::Error> {
-        source_map_mappings::parse_mappings::<()>(self.source_map.mappings.as_bytes())
+        source_map_mappings::parse_mappings::<()>(
+            self.source_map.mappings.as_ref().unwrap().as_bytes(),
+        )
     }
 
     pub fn all_generated_position_for(
@@ -303,7 +309,7 @@ impl BasicConsumer {
                     mapping.original.clone().map(|original| Mapping {
                         name: original
                             .name
-                            .map(|it| self.source_map.names[it as usize].clone()),
+                            .map(|it| self.source_map.names.as_ref().unwrap()[it as usize].clone()),
                         source: self.absolute_sources.at(original.source as i32),
                         original: Some(Position {
                             line: (original.original_line + 1) as i32,
@@ -325,7 +331,7 @@ impl BasicConsumer {
 
     pub fn has_contents_of_all_sources(&self) -> bool {
         match self.source_map.sources_content {
-            Some(ref s) => s.len() >= self.source_map.sources.len(),
+            Some(ref s) => s.len() >= self.source_map.sources.as_ref().unwrap().len(),
             None => false,
         }
     }
@@ -414,10 +420,9 @@ impl BasicConsumer {
                             .as_ref()
                             .map(|it| self.absolute_sources.at(it.source as i32))
                             .flatten(),
-                        name: mapping
-                            .original
-                            .as_ref()
-                            .map(|it| self.source_map.names[it.source as usize].clone()),
+                        name: mapping.original.as_ref().map(|it| {
+                            self.source_map.names.as_ref().unwrap()[it.source as usize].clone()
+                        }),
                         last_generated_column: last_column,
                     })
                 } else {
@@ -485,7 +490,7 @@ impl IndexedConsumer {
             panic!("Unsupported version: {}", version);
         }
 
-        let mut last_offset = Arc::new(Mutex::new(Position {
+        let last_offset = Arc::new(Mutex::new(Position {
             line: -1,
             column: 0,
         }));
@@ -497,6 +502,8 @@ impl IndexedConsumer {
             absolute_sources: ArraySet::from_array(
                 source_map
                     .sources
+                    .as_ref()
+                    .unwrap()
                     .iter()
                     .map(|it| {
                         util::compute_source_url(
@@ -557,6 +564,8 @@ impl IndexedConsumer {
             absolute_sources: ArraySet::from_array(
                 source_map
                     .sources
+                    .as_ref()
+                    .unwrap_or(&vec![])
                     .iter()
                     .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
                     .collect(),
@@ -573,8 +582,23 @@ impl IndexedConsumer {
         let mut sources: Vec<String> = vec![];
 
         for i in 0..self.sections.len() {
-            for j in 0..self.sections[i].consumer.source_map.sources.len() {
-                sources.push(self.sections[i].consumer.source_map.sources[j].clone());
+            for j in 0..self.sections[i]
+                .consumer
+                .source_map
+                .sources
+                .as_ref()
+                .unwrap()
+                .len()
+            {
+                sources.push(
+                    self.sections[i]
+                        .consumer
+                        .source_map
+                        .sources
+                        .as_ref()
+                        .unwrap()[j]
+                        .clone(),
+                );
             }
         }
 
