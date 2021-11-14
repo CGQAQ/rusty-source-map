@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct ArraySet {
     array: Vec<String>,
     set: HashMap<String, usize>,

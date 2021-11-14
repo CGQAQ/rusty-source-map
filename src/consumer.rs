@@ -1,9 +1,10 @@
 use crate::array_set::ArraySet;
 use crate::generator::SourceMapGenerator;
-use crate::mapping::Mapping;
+use crate::mapping::{self, Mapping};
 use crate::source_map::{Position, SourceMapJson};
 use crate::{binary_search, util};
 use rayon::{prelude::*, vec};
+use source_map_mappings::Bias;
 use std::collections::HashMap;
 use std::panic;
 use std::sync::{Arc, Mutex};
@@ -95,6 +96,7 @@ impl Consumer {
     }
 }
 
+#[derive(Clone)]
 pub enum IterOrd {
     GeneratedOrd,
     OriginalOrd,
@@ -605,9 +607,255 @@ impl IndexedConsumer {
         sources
     }
 
-    pub fn original_position_for(&self, input: Position) {
+    pub fn original_position_for(
+        &mut self,
+        input: Position,
+        bias: Option<Bias>,
+    ) -> Option<Mapping> {
         let needle = input;
 
-        let section_index = binary_search::search(needle, &self.sections, |a, b| 0, |a, b| 0, None);
+        let section_index = binary_search::search(
+            needle.clone(),
+            &self.sections,
+            |a, b| {
+                if a.line - b.generated_offset.line != 0 {
+                    a.line - b.generated_offset.line
+                } else {
+                    a.column - b.generated_offset.column
+                }
+            },
+            |a, b| {
+                if a.generated_offset.line - b.generated_offset.line != 0 {
+                    a.generated_offset.line - b.generated_offset.line
+                } else {
+                    a.generated_offset.column - b.generated_offset.column
+                }
+            },
+            None,
+        );
+
+        let section = self.sections.get_mut(section_index as usize);
+
+        section
+            .map(|section| {
+                section.consumer.original_position_for(
+                    Position {
+                        line: needle.line - (section.generated_offset.line - 1),
+                        column: needle.column
+                            - if section.generated_offset.line == needle.line {
+                                section.generated_offset.column - 1
+                            } else {
+                                0
+                            },
+                    },
+                    bias,
+                )
+            })
+            .flatten()
+    }
+
+    /// Return true if we have the source content for every source in the source
+    /// map, false otherwise.
+    pub fn has_contents_of_all_sources(&self) -> bool {
+        self.sections
+            .iter()
+            .all(|it| it.consumer.has_contents_of_all_sources())
+    }
+
+    /// Returns the original source content. The only argument is the url of the
+    /// original source file. Returns null if no original source content is
+    /// available.
+    pub fn source_content_for(
+        &mut self,
+        source: &str,
+        panic_on_missing: Option<bool>,
+    ) -> Option<String> {
+        for section in &mut self.sections {
+            if let Some(it) = section
+                .consumer
+                .source_content_for(source, panic_on_missing)
+            {
+                return Some(it);
+            }
+        }
+
+        let panic_on_missing = panic_on_missing.unwrap_or(true);
+        if panic_on_missing {
+            panic!("\"{}\"is not in the SourceMap.", source)
+        } else {
+            None
+        }
+    }
+
+    fn find_source_index(&mut self, source: &str) -> Option<i32> {
+        for i in 0..self.sections.len() {
+            let consumer = &mut self.sections[i].consumer;
+            if let Some(index) = consumer.find_source_index(source) {
+                return Some(index);
+            }
+        }
+
+        None
+    }
+
+    ///
+    /// Returns the generated line and column information for the original source,
+    /// line, and column positions provided. The only argument is an object with
+    /// the following properties:
+    ///
+    pub fn generated_position_for(
+        &mut self,
+        source: &str,
+        original_line: i32,
+        original_column: i32,
+        bias: Option<Bias>,
+    ) -> Option<Position> {
+        let index = self.find_source_index(source);
+        if let Some(index) = index {
+            let section = self.sections.get_mut(index as usize);
+            if let Some(section) = section {
+                let mut generated_position = section.consumer.generated_position_for(
+                    source,
+                    original_line,
+                    original_column,
+                    bias,
+                );
+                let next_section = self.sections.get(index as usize + 1);
+                if let Some(ref mut generated_position) = generated_position {
+                    let line_shift = generated_position.generated.line - 1;
+                    let column_shift = generated_position.generated.column - 1;
+
+                    if generated_position.generated.line == 1 {
+                        generated_position.generated.column += column_shift;
+                        if let Some(g) = &mut generated_position.last_generated_column {
+                            *g += column_shift;
+                        }
+                    }
+
+                    if let (Some(last_column), Some(next_section)) =
+                        (generated_position.last_generated_column, next_section)
+                    {
+                        if last_column == -1
+                            && generated_position.generated.line
+                                == next_section.generated_offset.line
+                        {
+                            generated_position
+                                .last_generated_column
+                                .replace(next_section.generated_offset.column - 2);
+                        }
+                        generated_position.generated.line += line_shift;
+
+                        return Some(Position {
+                            line: generated_position.generated.line,
+                            column: generated_position.generated.column,
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn all_generated_position_for(
+        &mut self,
+        source: &str,
+        original_line: i32,
+        original_column: Option<i32>,
+    ) -> Vec<source_map_mappings::Mapping> {
+        let index = self.find_source_index(source);
+        if let Some(index) = index {
+            let section = self.sections.get_mut(index as usize);
+            if let Some(section) = section {
+                section
+                    .consumer
+                    .all_generated_position_for(source, original_line, original_column)
+                    .iter()
+                    .map(|mapping| {
+                        let mut mapping = mapping.clone();
+                        let line_shift = mapping.generated_line - 1;
+                        let column_shift = mapping.generated_column - 1;
+
+                        if mapping.generated_line == 1 {
+                            mapping.generated_column += column_shift;
+                            if let Some(g) = &mut mapping.last_generated_column {
+                                *g += column_shift;
+                            } else {
+                            }
+                        }
+
+                        if mapping.last_generated_column.is_some() {
+                            // TODO(CGQAQ): is it OK to be u8?
+                            // if last_column == -1
+                            let next_section = self.sections.get(index as usize + 1);
+                            if let Some(next_section) = next_section {
+                                if mapping.generated_line
+                                    == next_section.generated_offset.line as u32
+                                {
+                                    mapping
+                                        .last_generated_column
+                                        .replace((next_section.generated_offset.column - 2) as u32);
+                                }
+                            }
+                            mapping.generated_line += line_shift;
+                        }
+
+                        mapping
+                    })
+                    .collect()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        }
+    }
+}
+
+impl ConsumerTrait for IndexedConsumer {
+    fn consume(source_map_raw: String, source_map_url: String, f: impl FnOnce(Self)) {
+        let consumer = IndexedConsumer::new(source_map_raw.as_str(), Some(source_map_url.as_str()));
+        f(consumer);
+    }
+
+    fn each_mapping(&mut self, f: impl Fn(&source_map_mappings::Mapping), ord: IterOrd) {
+        self.sections
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, section)| {
+                //     const nextSection =
+                //     index + 1 < this._sections.length ? this._sections[index + 1] : null;
+                // const { generatedOffset } = section;
+
+                // const lineShift = generatedOffset.generatedLine - 1;
+                // const columnShift = generatedOffset.generatedColumn - 1;
+
+                let generated_offset = &mut section.generated_offset;
+                let line_shift = generated_offset.line - 1;
+                let column_shift = generated_offset.column - 1;
+                section.consumer.each_mapping(
+                    |mapping| {
+                        let mut mapping = mapping.clone();
+                        if mapping.generated_line == 1 {
+                            mapping.generated_column += column_shift as u32;
+                            if let Some(it) = &mut mapping.last_generated_column {
+                                *it += column_shift as u32;
+                            }
+                        }
+
+                        let next_section = &self.sections.get(index + 1);
+                        if let Some(next_section) = next_section {
+                            if mapping.generated_line == next_section.generated_offset.line as u32 {
+                                mapping
+                                    .last_generated_column
+                                    .replace(next_section.generated_offset.column as u32 - 2);
+                            }
+                        }
+                        mapping.generated_line += line_shift as u32;
+                        f(&mapping);
+                    },
+                    ord.clone(),
+                )
+            })
     }
 }
