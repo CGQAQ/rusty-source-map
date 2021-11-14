@@ -1,11 +1,10 @@
 use crate::array_set::ArraySet;
 use crate::generator::SourceMapGenerator;
-use crate::mapping::{self, Mapping};
+use crate::mapping::Mapping;
 use crate::source_map::{Position, SourceMapJson};
 use crate::{binary_search, util};
-use rayon::{prelude::*, vec};
+use rayon::prelude::*;
 use source_map_mappings::Bias;
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::panic;
@@ -15,15 +14,18 @@ use std::sync::{Arc, Mutex};
 ///
 /// You should always use this function to create consumer
 ///
-pub fn create_consumer(source_map_raw: &str) -> Result<Consumer, serde_json::Error> {
+pub fn create_consumer(
+    source_map_raw: &str,
+    source_map_url: Option<&str>,
+) -> Result<Consumer, serde_json::Error> {
     let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw)?;
     if source_map.sections.is_some() {
         Ok(Consumer::IndexedConsumer(
-            IndexedConsumer::from_source_map_json(source_map),
+            IndexedConsumer::from_source_map_json(source_map, source_map_url),
         ))
     } else {
         Ok(Consumer::BasicConsumer(
-            BasicConsumer::from_source_map_json(source_map),
+            BasicConsumer::from_source_map_json(source_map, source_map_url),
         ))
     }
 }
@@ -146,7 +148,7 @@ impl BasicConsumer {
         }
     }
 
-    pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
+    pub fn from_source_map_json(source_map: SourceMapJson, source_map_url: Option<&str>) -> Self {
         BasicConsumer {
             source_map: source_map.clone(),
             source_lookup_cache: Default::default(),
@@ -157,7 +159,13 @@ impl BasicConsumer {
                     .as_ref()
                     .unwrap()
                     .iter()
-                    .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
+                    .map(|it| {
+                        util::compute_source_url(
+                            source_map.source_root.as_deref(),
+                            it,
+                            source_map_url,
+                        )
+                    })
                     .collect(),
                 true,
             ),
@@ -195,9 +203,9 @@ impl BasicConsumer {
 
         // Fall back to treating the source as sourceRoot-relative.
         let source_as_source_root_relative = util::compute_source_url(
-            self.source_map.source_root.as_ref().map(|it| it.as_str()),
+            self.source_map.source_root.as_deref(),
             source,
-            self.source_map_url.as_ref().map(|it| it.as_str()),
+            self.source_map_url.as_deref(),
         );
         if self
             .absolute_sources
@@ -473,11 +481,11 @@ pub struct Section {
 
 pub struct IndexedConsumer {
     pub source_map: SourceMapJson,
-    pub(crate) source_lookup_cache: HashMap<String, i32>,
-    pub(crate) absolute_sources: ArraySet,
-    pub(crate) source_map_url: Option<String>,
-    pub(crate) mappings: Option<source_map_mappings::Mappings>,
-    pub(crate) computed_column_spans: bool,
+    // pub(crate) source_lookup_cache: HashMap<String, i32>,
+    // pub(crate) absolute_sources: ArraySet,
+    // pub(crate) source_map_url: Option<String>,
+    // pub(crate) mappings: Option<source_map_mappings::Mappings>,
+    // pub(crate) computed_column_spans: bool,
     pub(crate) sections: Rc<RefCell<Vec<Section>>>,
 }
 
@@ -486,7 +494,10 @@ const SUPPORTED_SOURCE_MAP_VERSION: i32 = 3;
 impl IndexedConsumer {
     pub fn new(source_map_raw: &str, source_map_url: Option<&str>) -> Self {
         let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw).unwrap();
+        Self::from_source_map_json(source_map, source_map_url)
+    }
 
+    pub fn from_source_map_json(source_map: SourceMapJson, source_map_url: Option<&str>) -> Self {
         let version = source_map.version;
 
         // Once again, Sass deviates from the spec and supplies the version as a
@@ -502,33 +513,33 @@ impl IndexedConsumer {
 
         IndexedConsumer {
             source_map: source_map.clone(),
-            source_lookup_cache: Default::default(),
-            source_map_url: source_map_url.map(|it| it.to_string()),
-            absolute_sources: ArraySet::from_array(
-                source_map
-                    .sources
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .map(|it| {
-                        util::compute_source_url(
-                            source_map.source_root.as_deref(),
-                            it,
-                            source_map_url,
-                        )
-                    })
-                    .collect(),
-                true,
-            ),
-            mappings: None,
-            computed_column_spans: false,
+            // source_lookup_cache: Default::default(),
+            // source_map_url: source_map_url.map(|it| it.to_string()),
+            // absolute_sources: ArraySet::from_array(
+            //     source_map
+            //         .sources
+            //         .as_ref()
+            //         .unwrap()
+            //         .iter()
+            //         .map(|it| {
+            //             util::compute_source_url(
+            //                 source_map.source_root.as_deref(),
+            //                 it,
+            //                 source_map_url,
+            //             )
+            //         })
+            //         .collect(),
+            //     true,
+            // ),
+            // mappings: None,
+            // computed_column_spans: false,
             sections: Rc::new(RefCell::new(
                 source_map
                     .sections
                     .unwrap()
                     .par_iter()
                     .map({
-                        let last_offset = last_offset.clone();
+                        let last_offset = last_offset;
                         move |section| {
                             if section.url.is_some() {
                                 panic!("Section with url is not supported.");
@@ -554,33 +565,15 @@ impl IndexedConsumer {
                                     line: line + 1,
                                     column: colum + 1,
                                 },
-                                consumer: BasicConsumer::from_source_map_json(*section.map.clone()),
+                                consumer: BasicConsumer::from_source_map_json(
+                                    *section.map.clone(),
+                                    source_map_url,
+                                ),
                             }
                         }
                     })
                     .collect(),
             )),
-        }
-    }
-
-    pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
-        IndexedConsumer {
-            source_map: source_map.clone(),
-            source_lookup_cache: Default::default(),
-            source_map_url: None,
-            absolute_sources: ArraySet::from_array(
-                source_map
-                    .sources
-                    .as_ref()
-                    .unwrap_or(&vec![])
-                    .iter()
-                    .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
-                    .collect(),
-                true,
-            ),
-            mappings: None,
-            computed_column_spans: false,
-            sections: Rc::new(RefCell::new(Vec::new())),
         }
     }
 

@@ -1,5 +1,5 @@
-use crate::constants::*;
-use crate::consumer::*;
+
+
 
 // exports[
 //   "test that we can instantiate with a string or an object"

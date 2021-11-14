@@ -18,7 +18,7 @@ fn recursive_search<T1, T2>(
     low: i32,
     high: i32,
     needle: &T1,
-    hay_stack: &Vec<T2>,
+    hay_stack: &[T2],
     compare: &impl Fn(&T1, &T2) -> i32,
     bias: i32,
 ) -> i32 {
@@ -35,6 +35,7 @@ fn recursive_search<T1, T2>(
     let mid: i32 = (high - low) / 2 + low;
     let cmp = compare(needle, &hay_stack[mid as usize]);
 
+    #[allow(clippy::comparison_chain)]
     if cmp == 0 {
         // Found the element we are looking for.
         return mid;
@@ -66,17 +67,21 @@ fn recursive_search<T1, T2>(
         return mid;
     }
 
-    return if low < 0 { -1 } else { low };
+    if low < 0 {
+        -1
+    } else {
+        low
+    }
 }
 
 pub fn search<T1, T2>(
     needle: T1,
-    hay_stack: &Vec<T2>,
+    hay_stack: &[T2],
     compare1: impl Fn(&T1, &T2) -> i32,
     compare2: impl Fn(&T2, &T2) -> i32,
     bias: Option<i32>,
 ) -> i32 {
-    if hay_stack.len() == 0 {
+    if hay_stack.is_empty() {
         return -1;
     }
 
@@ -95,14 +100,14 @@ pub fn search<T1, T2>(
     // We have found either the exact element, or the next-closest element to
     // the one we are searching for. However, there may be more than one such
     // element. Make sure we always return the smallest of these.
-    while index - 1 >= 0 {
+    while index > 0 {
         if compare2(&hay_stack[index as usize], &hay_stack[(index - 1) as usize]) != 0 {
             break;
         }
         index -= 1;
     }
 
-    return index;
+    index
 }
 
 #[cfg(test)]

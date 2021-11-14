@@ -6,6 +6,15 @@ pub struct ArraySet {
     set: HashMap<String, usize>,
 }
 
+impl Default for ArraySet {
+    fn default() -> Self {
+        ArraySet {
+            array: Vec::new(),
+            set: HashMap::new(),
+        }
+    }
+}
+
 impl ArraySet {
     /// What is the element at the given index?
     /// # Examples
@@ -16,10 +25,7 @@ impl ArraySet {
     /// assert_eq!(set.size(), 0);
     /// ```
     pub fn new() -> Self {
-        ArraySet {
-            array: Vec::new(),
-            set: HashMap::new(),
-        }
+        Default::default()
     }
 
     /// What is the element at the given index?

@@ -27,7 +27,7 @@ fn to_vlq_signed(value: i32) -> i32 {
     if value < 0 {
         (-value << 1) + 1
     } else {
-        (value << 1) + 0
+        value << 1
     }
 }
 

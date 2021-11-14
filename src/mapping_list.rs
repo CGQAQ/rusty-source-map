@@ -17,13 +17,19 @@ pub struct MappingList {
     last: Option<Mapping>,
 }
 
-impl MappingList {
-    pub fn new() -> Self {
+impl Default for MappingList {
+    fn default() -> Self {
         MappingList {
             array: Vec::new(),
             sorted: true,
             last: None,
         }
+    }
+}
+
+impl MappingList {
+    pub fn new() -> Self {
+        Default::default()
     }
 
     /// Iterate through internal items. This method takes the same arguments that
@@ -48,7 +54,7 @@ impl MappingList {
                 original: None,
                 last_generated_column: None,
             }),
-            &mapping.clone(),
+            &mapping,
         ) {
             self.last = Some(mapping.clone());
             self.array.push(mapping);
@@ -62,12 +68,10 @@ impl MappingList {
         if !self.sorted {
             self.array.sort_by(|a, b| {
                 let cmp = util::compare_by_generated_pos_inflated(a, b);
-                if cmp > 0 {
-                    std::cmp::Ordering::Greater
-                } else if cmp == 0 {
-                    std::cmp::Ordering::Equal
-                } else {
-                    std::cmp::Ordering::Less
+                match cmp {
+                    d if d > 0 => std::cmp::Ordering::Greater,
+                    d if d == 0 => std::cmp::Ordering::Equal,
+                    _ => std::cmp::Ordering::Less,
                 }
             });
             self.sorted = true;

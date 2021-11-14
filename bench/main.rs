@@ -6,7 +6,7 @@ use rusty_source_map::consumer::{Consumer, ConsumerTrait, IterOrd};
 fn main() {
     let content = read_to_string("./bench/angular-min-source-map.json").unwrap();
     let a = Instant::now();
-    let consumer = rusty_source_map::consumer::create_consumer(&content).unwrap();
+    let consumer = rusty_source_map::consumer::create_consumer(&content, None).unwrap();
     if let Consumer::BasicConsumer(mut consumer) = consumer {
         consumer.each_mapping(|_| {}, IterOrd::GeneratedOrd)
     }

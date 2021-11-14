@@ -172,7 +172,7 @@ impl SourceMapGenerator {
     pub(crate) fn as_json(&mut self) -> SourceMapJson {
         let sources_vec = self.sources.to_vec();
         let mut sources_content: Option<Vec<String>> = None;
-        if self.source_contents.len() > 0 {
+        if !self.source_contents.is_empty() {
             sources_content = Some(
                 self.generate_sources_contents(sources_vec.clone(), self.source_root.clone())
                     .into_iter()
