@@ -3,8 +3,11 @@ source-map npm package written in Rust
 
 ## bench
 
-### [orignal](https://github.com/CGQAQ/source-map/blob/master/bench/bench_angular-min-source-map.js)
-![image](https://user-images.githubusercontent.com/15936231/138583336-5932fbdb-fe67-4b40-86d0-58371b3e12e3.png)
+### You should have nodejs-lts and rust toolchain(include cargo) pre-installed.
+```bash
+git clone --recurse-submodules git@github.com:CGQAQ/rusty-source-map.git rusty-source-map
+cd rusty-source-map
+./bench.sh
+```
 
-### [rusty-source-map](https://github.com/CGQAQ/rusty-source-map/blob/master/bench/main.rs)
-![image](https://user-images.githubusercontent.com/15936231/138583389-2a87371b-8869-45f1-ba6c-490e46ee56f0.png)
+![image](https://user-images.githubusercontent.com/15936231/141686375-853e9226-b193-417e-be91-4394455c657f.png)
