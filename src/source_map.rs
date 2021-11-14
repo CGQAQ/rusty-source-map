@@ -11,13 +11,16 @@ pub struct SourceMapJson {
     pub source_root: Option<String>,
     #[serde(rename = "sourcesContent")]
     pub sources_content: Option<Vec<String>>,
-    pub sections: Option<Section>,
+    pub sections: Option<Vec<Section>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Section {
-    offset: Position,
-    map: Box<SourceMapJson>,
+    pub offset: Position,
+    pub map: Box<SourceMapJson>,
+
+    // ref: https://github.com/mozilla/source-map/issues/437
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -3,7 +3,10 @@ use crate::generator::SourceMapGenerator;
 use crate::mapping::Mapping;
 use crate::source_map::{Position, SourceMapJson};
 use crate::util;
+use rayon::prelude::*;
 use std::collections::HashMap;
+use std::panic;
+use std::sync::{Arc, Mutex};
 
 ///
 /// You should always use this function to create consumer
@@ -105,8 +108,8 @@ pub trait ConsumerTrait: Sized {
 pub struct BasicConsumer {
     pub source_map: SourceMapJson,
     pub(crate) source_lookup_cache: HashMap<String, i32>,
-    pub(crate) source_map_url: Option<String>,
     pub(crate) absolute_sources: ArraySet,
+    pub(crate) source_map_url: Option<String>,
     pub(crate) mappings: Option<source_map_mappings::Mappings>,
     pub(crate) computed_column_spans: bool,
 }
@@ -332,9 +335,7 @@ impl BasicConsumer {
         source: &str,
         panic_on_missing: Option<bool>,
     ) -> Option<String> {
-        if self.source_map.sources_content.is_none() {
-            return None;
-        }
+        self.source_map.sources_content.as_ref()?;
 
         let sources_content = self.source_map.sources_content.clone().unwrap();
         let panic_on_missing = panic_on_missing.unwrap_or(true);
@@ -455,17 +456,119 @@ impl ConsumerTrait for BasicConsumer {
     }
 }
 
-pub struct IndexedConsumer {
-    pub source_map: SourceMapJson,
+pub struct Section {
+    generated_offset: Position,
+    consumer: BasicConsumer,
 }
 
+pub struct IndexedConsumer {
+    pub source_map: SourceMapJson,
+    pub(crate) source_lookup_cache: HashMap<String, i32>,
+    pub(crate) absolute_sources: ArraySet,
+    pub(crate) source_map_url: Option<String>,
+    pub(crate) mappings: Option<source_map_mappings::Mappings>,
+    pub(crate) computed_column_spans: bool,
+    pub(crate) sections: Vec<Section>,
+}
+
+const SUPPORTED_SOURCE_MAP_VERSION: i32 = 3;
+
 impl IndexedConsumer {
-    pub fn new(source_map_raw: &str) -> Self {
+    pub fn new(source_map_raw: &str, source_map_url: Option<&str>) -> Self {
         let source_map = serde_json::from_str::<SourceMapJson>(source_map_raw).unwrap();
-        IndexedConsumer { source_map }
+
+        let version = source_map.version;
+
+        // Once again, Sass deviates from the spec and supplies the version as a
+        // string rather than a number, so we use loose equality checking here.
+        if version != SUPPORTED_SOURCE_MAP_VERSION {
+            panic!("Unsupported version: {}", version);
+        }
+
+        let mut last_offset = Arc::new(Mutex::new(Position {
+            line: -1,
+            column: 0,
+        }));
+
+        IndexedConsumer {
+            source_map: source_map.clone(),
+            source_lookup_cache: Default::default(),
+            source_map_url: source_map_url.map(|it| it.to_string()),
+            absolute_sources: ArraySet::from_array(
+                source_map
+                    .sources
+                    .iter()
+                    .map(|it| {
+                        util::compute_source_url(
+                            source_map.source_root.as_deref(),
+                            it,
+                            source_map_url,
+                        )
+                    })
+                    .collect(),
+                true,
+            ),
+            mappings: None,
+            computed_column_spans: false,
+            sections: source_map
+                .sections
+                .unwrap()
+                .par_iter()
+                .map({
+                    let last_offset = last_offset.clone();
+                    move |section| {
+                        if section.url.is_some() {
+                            panic!("Section with url is not supported.");
+                        }
+
+                        let line = section.offset.line;
+                        let colum = section.offset.column;
+
+                        let mut last_offset = last_offset.lock().unwrap();
+
+                        if line < last_offset.line
+                            || (line == last_offset.line && colum < last_offset.column)
+                        {
+                            panic!("Section offsets must be ordered and non-overlapping.")
+                        }
+
+                        *last_offset = section.offset.clone();
+
+                        Section {
+                            generated_offset: Position {
+                                // The offset fields are 0-based, but we use 1-based indices when
+                                // encoding/decoding from VLQ.
+                                line: line + 1,
+                                column: colum + 1,
+                            },
+                            consumer: BasicConsumer::from_source_map_json(*section.map.clone()),
+                        }
+                    }
+                })
+                .collect(),
+        }
     }
 
     pub fn from_source_map_json(source_map: SourceMapJson) -> Self {
-        IndexedConsumer { source_map }
+        IndexedConsumer {
+            source_map: source_map.clone(),
+            source_lookup_cache: Default::default(),
+            source_map_url: None,
+            absolute_sources: ArraySet::from_array(
+                source_map
+                    .sources
+                    .iter()
+                    .map(|it| util::compute_source_url(source_map.source_root.as_deref(), it, None))
+                    .collect(),
+                true,
+            ),
+            mappings: None,
+            computed_column_spans: false,
+            sections: Vec::new(),
+        }
     }
+
+    // pub fn get_sources(&self) -> {
+    //
+    // }
 }
