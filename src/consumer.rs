@@ -815,6 +815,12 @@ impl IndexedConsumer {
             vec![]
         }
     }
+
+    pub fn computed_column_spans(&mut self) {
+        for ele in (*self.sections).borrow_mut().iter_mut() {
+            ele.consumer.compute_column_spans()
+        }
+    }
 }
 
 impl ConsumerTrait for IndexedConsumer {
