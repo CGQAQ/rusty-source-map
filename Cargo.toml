@@ -16,7 +16,7 @@ opt-level = 3
 path = "src/lib.rs"
 
 [[bin]]
-name = "bench"
+name = "main"
 path = "bench/main.rs"
 
 

@@ -1,5 +1,6 @@
-
-
+#![allow(unused_imports)]
+use crate::constants::*;
+use crate::consumer::*;
 
 // exports[
 //   "test that we can instantiate with a string or an object"
@@ -11,7 +12,7 @@
 // };
 #[test]
 fn test_instantiate() {
-    let _ = create_consumer(testMap).unwrap();
+    let _ = create_consumer(testMap, None).unwrap();
 }
 
 // exports[
@@ -23,7 +24,7 @@ fn test_instantiate() {
 // };
 #[test]
 fn test_is_consumer() {
-    assert!(create_consumer(testMap).is_ok())
+    assert!(create_consumer(testMap, None).is_ok())
 }
 
 // exports[
@@ -35,7 +36,7 @@ fn test_is_consumer() {
 // };
 #[test]
 fn test_no_section() {
-    let map = create_consumer(testMap).unwrap();
+    let map = create_consumer(testMap, None).unwrap();
     if let Consumer::BasicConsumer(_) = map {
         assert!(true)
     } else {
@@ -52,7 +53,7 @@ fn test_no_section() {
 // };
 #[test]
 fn test_has_section() {
-    let map = create_consumer(indexedTestMap).unwrap();
+    let map = create_consumer(indexedTestMap, None).unwrap();
     if let Consumer::IndexedConsumer(_) = map {
     } else {
         unreachable!()
@@ -102,7 +103,7 @@ fn test_has_section() {
 // };
 #[test]
 fn test_sources_has_original_sources() {
-    let map = create_consumer(testMap).unwrap();
+    let map = create_consumer(testMap, None).unwrap();
     let map = map.as_basic_consumer();
     assert_eq!(map.get_sources()[0], "/the/root/one.js");
     assert_eq!(map.get_sources()[1], "/the/root/two.js");
@@ -111,7 +112,7 @@ fn test_sources_has_original_sources() {
 
 #[test]
 fn test_sources() {
-    let map = create_consumer(testMap).unwrap();
+    let map = create_consumer(testMap, None).unwrap();
     if let Consumer::BasicConsumer(consumer) = map {
         let sources = consumer.absolute_sources.to_vec();
         assert_eq!(sources[0], "/the/root/one.js");
