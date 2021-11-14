@@ -5,8 +5,11 @@ use crate::source_map::{Position, SourceMapJson};
 use crate::{binary_search, util};
 use rayon::{prelude::*, vec};
 use source_map_mappings::Bias;
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::panic;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 ///
@@ -475,7 +478,7 @@ pub struct IndexedConsumer {
     pub(crate) source_map_url: Option<String>,
     pub(crate) mappings: Option<source_map_mappings::Mappings>,
     pub(crate) computed_column_spans: bool,
-    pub(crate) sections: Vec<Section>,
+    pub(crate) sections: Rc<RefCell<Vec<Section>>>,
 }
 
 const SUPPORTED_SOURCE_MAP_VERSION: i32 = 3;
@@ -519,42 +522,44 @@ impl IndexedConsumer {
             ),
             mappings: None,
             computed_column_spans: false,
-            sections: source_map
-                .sections
-                .unwrap()
-                .par_iter()
-                .map({
-                    let last_offset = last_offset.clone();
-                    move |section| {
-                        if section.url.is_some() {
-                            panic!("Section with url is not supported.");
+            sections: Rc::new(RefCell::new(
+                source_map
+                    .sections
+                    .unwrap()
+                    .par_iter()
+                    .map({
+                        let last_offset = last_offset.clone();
+                        move |section| {
+                            if section.url.is_some() {
+                                panic!("Section with url is not supported.");
+                            }
+
+                            let line = section.offset.line;
+                            let colum = section.offset.column;
+
+                            let mut last_offset = last_offset.lock().unwrap();
+
+                            if line < last_offset.line
+                                || (line == last_offset.line && colum < last_offset.column)
+                            {
+                                panic!("Section offsets must be ordered and non-overlapping.")
+                            }
+
+                            *last_offset = section.offset.clone();
+
+                            Section {
+                                generated_offset: Position {
+                                    // The offset fields are 0-based, but we use 1-based indices when
+                                    // encoding/decoding from VLQ.
+                                    line: line + 1,
+                                    column: colum + 1,
+                                },
+                                consumer: BasicConsumer::from_source_map_json(*section.map.clone()),
+                            }
                         }
-
-                        let line = section.offset.line;
-                        let colum = section.offset.column;
-
-                        let mut last_offset = last_offset.lock().unwrap();
-
-                        if line < last_offset.line
-                            || (line == last_offset.line && colum < last_offset.column)
-                        {
-                            panic!("Section offsets must be ordered and non-overlapping.")
-                        }
-
-                        *last_offset = section.offset.clone();
-
-                        Section {
-                            generated_offset: Position {
-                                // The offset fields are 0-based, but we use 1-based indices when
-                                // encoding/decoding from VLQ.
-                                line: line + 1,
-                                column: colum + 1,
-                            },
-                            consumer: BasicConsumer::from_source_map_json(*section.map.clone()),
-                        }
-                    }
-                })
-                .collect(),
+                    })
+                    .collect(),
+            )),
         }
     }
 
@@ -575,7 +580,7 @@ impl IndexedConsumer {
             ),
             mappings: None,
             computed_column_spans: false,
-            sections: Vec::new(),
+            sections: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -583,8 +588,8 @@ impl IndexedConsumer {
     pub fn get_sources(&self) -> Vec<String> {
         let mut sources: Vec<String> = vec![];
 
-        for i in 0..self.sections.len() {
-            for j in 0..self.sections[i]
+        for i in 0..(*self.sections).borrow().len() {
+            for j in 0..(*self.sections).borrow()[i]
                 .consumer
                 .source_map
                 .sources
@@ -593,7 +598,7 @@ impl IndexedConsumer {
                 .len()
             {
                 sources.push(
-                    self.sections[i]
+                    (*self.sections).borrow()[i]
                         .consumer
                         .source_map
                         .sources
@@ -616,7 +621,7 @@ impl IndexedConsumer {
 
         let section_index = binary_search::search(
             needle.clone(),
-            &self.sections,
+            &(*self.sections).borrow(),
             |a, b| {
                 if a.line - b.generated_offset.line != 0 {
                     a.line - b.generated_offset.line
@@ -634,16 +639,16 @@ impl IndexedConsumer {
             None,
         );
 
-        let section = self.sections.get_mut(section_index as usize);
-
-        section
-            .map(|section| {
-                section.consumer.original_position_for(
+        (&*self.sections)
+            .borrow_mut()
+            .get_mut(section_index as usize)
+            .map(|it| {
+                it.consumer.original_position_for(
                     Position {
-                        line: needle.line - (section.generated_offset.line - 1),
+                        line: needle.line - (it.generated_offset.line - 1),
                         column: needle.column
-                            - if section.generated_offset.line == needle.line {
-                                section.generated_offset.column - 1
+                            - if it.generated_offset.line == needle.line {
+                                it.generated_offset.column - 1
                             } else {
                                 0
                             },
@@ -657,7 +662,8 @@ impl IndexedConsumer {
     /// Return true if we have the source content for every source in the source
     /// map, false otherwise.
     pub fn has_contents_of_all_sources(&self) -> bool {
-        self.sections
+        (*self.sections)
+            .borrow()
             .iter()
             .all(|it| it.consumer.has_contents_of_all_sources())
     }
@@ -670,7 +676,7 @@ impl IndexedConsumer {
         source: &str,
         panic_on_missing: Option<bool>,
     ) -> Option<String> {
-        for section in &mut self.sections {
+        for section in (*self.sections).borrow_mut().iter_mut() {
             if let Some(it) = section
                 .consumer
                 .source_content_for(source, panic_on_missing)
@@ -688,8 +694,8 @@ impl IndexedConsumer {
     }
 
     fn find_source_index(&mut self, source: &str) -> Option<i32> {
-        for i in 0..self.sections.len() {
-            let consumer = &mut self.sections[i].consumer;
+        for i in 0..(*self.sections).borrow().len() {
+            let consumer = &mut (*self.sections).borrow_mut()[i].consumer;
             if let Some(index) = consumer.find_source_index(source) {
                 return Some(index);
             }
@@ -712,15 +718,13 @@ impl IndexedConsumer {
     ) -> Option<Position> {
         let index = self.find_source_index(source);
         if let Some(index) = index {
-            let section = self.sections.get_mut(index as usize);
-            if let Some(section) = section {
+            if let Some(section) = (*self.sections).borrow_mut().get_mut(index as usize) {
                 let mut generated_position = section.consumer.generated_position_for(
                     source,
                     original_line,
                     original_column,
                     bias,
                 );
-                let next_section = self.sections.get(index as usize + 1);
                 if let Some(ref mut generated_position) = generated_position {
                     let line_shift = generated_position.generated.line - 1;
                     let column_shift = generated_position.generated.column - 1;
@@ -732,9 +736,10 @@ impl IndexedConsumer {
                         }
                     }
 
-                    if let (Some(last_column), Some(next_section)) =
-                        (generated_position.last_generated_column, next_section)
-                    {
+                    if let (Some(last_column), Some(next_section)) = (
+                        generated_position.last_generated_column,
+                        (*self.sections).borrow().get(index as usize + 1),
+                    ) {
                         if last_column == -1
                             && generated_position.generated.line
                                 == next_section.generated_offset.line
@@ -765,8 +770,7 @@ impl IndexedConsumer {
     ) -> Vec<source_map_mappings::Mapping> {
         let index = self.find_source_index(source);
         if let Some(index) = index {
-            let section = self.sections.get_mut(index as usize);
-            if let Some(section) = section {
+            if let Some(section) = (*self.sections).borrow_mut().get_mut(index as usize) {
                 section
                     .consumer
                     .all_generated_position_for(source, original_line, original_column)
@@ -787,7 +791,8 @@ impl IndexedConsumer {
                         if mapping.last_generated_column.is_some() {
                             // TODO(CGQAQ): is it OK to be u8?
                             // if last_column == -1
-                            let next_section = self.sections.get(index as usize + 1);
+                            let sections_ref = (*self.sections).borrow();
+                            let next_section = sections_ref.get(index as usize + 1);
                             if let Some(next_section) = next_section {
                                 if mapping.generated_line
                                     == next_section.generated_offset.line as u32
@@ -819,43 +824,55 @@ impl ConsumerTrait for IndexedConsumer {
     }
 
     fn each_mapping(&mut self, f: impl Fn(&source_map_mappings::Mapping), ord: IterOrd) {
-        self.sections
+        (*self.sections)
+            .borrow_mut()
             .iter_mut()
             .enumerate()
-            .for_each(|(index, section)| {
-                //     const nextSection =
-                //     index + 1 < this._sections.length ? this._sections[index + 1] : null;
-                // const { generatedOffset } = section;
+            .for_each({
+                let sections = &self.sections;
+                let f = &f;
 
-                // const lineShift = generatedOffset.generatedLine - 1;
-                // const columnShift = generatedOffset.generatedColumn - 1;
+                move |(index, section)| {
+                    //     const nextSection =
+                    //     index + 1 < this._sections.length ? this._sections[index + 1] : null;
+                    // const { generatedOffset } = section;
 
-                let generated_offset = &mut section.generated_offset;
-                let line_shift = generated_offset.line - 1;
-                let column_shift = generated_offset.column - 1;
-                section.consumer.each_mapping(
-                    |mapping| {
-                        let mut mapping = mapping.clone();
-                        if mapping.generated_line == 1 {
-                            mapping.generated_column += column_shift as u32;
-                            if let Some(it) = &mut mapping.last_generated_column {
-                                *it += column_shift as u32;
+                    // const lineShift = generatedOffset.generatedLine - 1;
+                    // const columnShift = generatedOffset.generatedColumn - 1;
+
+                    let generated_offset = &mut section.generated_offset;
+                    let line_shift = generated_offset.line - 1;
+                    let column_shift = generated_offset.column - 1;
+                    section.consumer.each_mapping(
+                        {
+                            let sections_ref = (**sections).borrow();
+                            move |mapping| {
+                                let next_section = sections_ref.get(index + 1);
+
+                                let mut mapping = mapping.clone();
+                                if mapping.generated_line == 1 {
+                                    mapping.generated_column += column_shift as u32;
+                                    if let Some(it) = &mut mapping.last_generated_column {
+                                        *it += column_shift as u32;
+                                    }
+                                }
+
+                                if let Some(next_section) = next_section {
+                                    if mapping.generated_line
+                                        == next_section.generated_offset.line as u32
+                                    {
+                                        mapping.last_generated_column.replace(
+                                            next_section.generated_offset.column as u32 - 2,
+                                        );
+                                    }
+                                }
+                                mapping.generated_line += line_shift as u32;
+                                f(&mapping);
                             }
-                        }
-
-                        let next_section = &self.sections.get(index + 1);
-                        if let Some(next_section) = next_section {
-                            if mapping.generated_line == next_section.generated_offset.line as u32 {
-                                mapping
-                                    .last_generated_column
-                                    .replace(next_section.generated_offset.column as u32 - 2);
-                            }
-                        }
-                        mapping.generated_line += line_shift as u32;
-                        f(&mapping);
-                    },
-                    ord.clone(),
-                )
+                        },
+                        ord.clone(),
+                    )
+                }
             })
     }
 }
