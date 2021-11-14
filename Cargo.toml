@@ -7,7 +7,7 @@ homepage = "https://github.com/CGQAQ/rusty-source-map"
 repository = "https://github.com/CGQAQ/rusty-source-map"
 license = "MIT"
 description = "`source-map` NPM package written in Rust."
-exclude=["/bench", "/target", "/.idea"]
+exclude=["/bench/fixture", "/target", "/.idea"]
 
 
 [profile.release]
