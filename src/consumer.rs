@@ -463,13 +463,8 @@ impl ConsumerTrait for BasicConsumer {
         let mappings = self.mappings.as_mut().unwrap();
 
         match ord {
-            IterOrd::OriginalOrd => mappings
-                .by_original_location()
-                .for_each(|mapping| f(mapping)),
-            IterOrd::GeneratedOrd => mappings
-                .by_generated_location()
-                .iter()
-                .for_each(|mapping| f(mapping)),
+            IterOrd::OriginalOrd => mappings.by_original_location().for_each(f),
+            IterOrd::GeneratedOrd => mappings.by_generated_location().iter().for_each(f),
         }
     }
 }

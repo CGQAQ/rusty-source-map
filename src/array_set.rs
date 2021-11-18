@@ -1,18 +1,9 @@
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ArraySet {
     array: Vec<String>,
     set: HashMap<String, usize>,
-}
-
-impl Default for ArraySet {
-    fn default() -> Self {
-        ArraySet {
-            array: Vec::new(),
-            set: HashMap::new(),
-        }
-    }
 }
 
 impl ArraySet {

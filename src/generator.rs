@@ -21,6 +21,18 @@ pub struct SourceMapGenerator {
 }
 
 impl SourceMapGenerator {
+    pub fn new(file: Option<String>, source_root: Option<String>, skip_validation: bool) -> Self {
+        SourceMapGenerator {
+            file,
+            source_root,
+            skip_validation,
+            sources: ArraySet::new(),
+            names: ArraySet::new(),
+            mappings: MappingList::new(),
+            source_contents: HashMap::new(),
+        }
+    }
+
     pub fn from_source_map() {
         unimplemented!()
     }
